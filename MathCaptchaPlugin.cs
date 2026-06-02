@@ -15,7 +15,7 @@ internal class CaptchaSession
     public DateTime ExpireTime { get; set; }
     public DateTime LastNotificationTime { get; set; }
     
-    // Переменные для защиты от флуда пакетами
+    // Переменные для защиты от флуда в чате
     public int MessageCountCurrentSecond { get; set; }
     public DateTime LastMessageTimestamp { get; set; } = DateTime.UtcNow;
     public int TotalMessagesSent { get; set; }
@@ -31,7 +31,7 @@ public class MathCaptchaPlugin : TerrariaPlugin
     public override string Name => "MathCaptcha";
     public override string Author => "ChatGPT & Gemini";
     public override string Description => "Math captcha with absolute movement lock and exploit mitigation";
-    public override Version Version => new(1, 6, 3);
+    public override Version Version => new(1, 6, 4);
 
     private readonly Dictionary<int, CaptchaSession> _sessions = new();
     private readonly Random _random = new();
@@ -130,7 +130,31 @@ public class MathCaptchaPlugin : TerrariaPlugin
         if (!_sessions.TryGetValue(player.Index, out var session))
             return;
 
+        // МГНОВЕННЫЙ БЛОК: Сообщение гарантированно не улетит в глобальный чат
         args.Handled = true;
+
+        // --- ИСПРАВЛЕННЫЙ БЛОК КОНТРОЛЯ ФЛУДА ---
+        var now = DateTime.UtcNow;
+        if ((now - session.LastMessageTimestamp).TotalSeconds < 1.0)
+        {
+            session.MessageCountCurrentSecond++;
+        }
+        else
+        {
+            session.MessageCountCurrentSecond = 1;
+            session.LastMessageTimestamp = now;
+        }
+
+        session.TotalMessagesSent++;
+
+        // Если игрок отправил больше 5 сообщений ВСЕГО или пишет чаще 2 сообщений в секунду — ТИХИЙ КИК
+        if (session.TotalMessagesSent > 5 || session.MessageCountCurrentSecond > 2)
+        {
+            _sessions.Remove(player.Index);
+            player.Disconnect("MathCaptcha: Превышен лимит попыток ввода / флуд.");
+            return;
+        }
+        // ----------------------------------------
 
         string text = args.Text.Trim();
 
@@ -142,7 +166,7 @@ public class MathCaptchaPlugin : TerrariaPlugin
 
         if (!int.TryParse(text, out int result))
         {
-            player.SendErrorMessage("Введите число (ответ на пример).");
+            player.SendErrorMessage($"Введите число. У вас осталось {5 - session.TotalMessagesSent} попыток.");
             return;
         }
 
@@ -158,7 +182,7 @@ public class MathCaptchaPlugin : TerrariaPlugin
         }
         else
         {
-            player.SendErrorMessage("Неверный ответ. Попробуйте еще раз!");
+            player.SendErrorMessage($"Неверный ответ. У вас осталось {5 - session.TotalMessagesSent} попыток.");
         }
     }
 
@@ -230,12 +254,11 @@ public class MathCaptchaPlugin : TerrariaPlugin
     {
         if (!_isEnabled) return;
 
-        if (_sessions.TryGetValue(args.Msg.whoAmI, out var session))
+        if (_sessions.TryGetValue(args.Msg.whoAmI, out _))
         {
-            // Исправлено: Проверяем только LoadNetModule, так как ChatText удален в новых версиях API
             if (args.MsgID == PacketTypes.LoadNetModule)
             {
-                // 1. Защита от краш-строк (длина пакета чата)
+                // Оставляем ТУТ исключительно защиту от огромных краш-пакетов (длина пакета чата)
                 if (args.Length > 60)
                 {
                     args.Handled = true;
@@ -243,31 +266,6 @@ public class MathCaptchaPlugin : TerrariaPlugin
                     if (attacker != null && attacker.Active)
                     {
                         attacker.Disconnect("MathCaptcha: Превышен размер пакета чата.");
-                    }
-                    return;
-                }
-
-                // 2. Лимит скорости отправки сообщений во время капчи
-                var now = DateTime.UtcNow;
-                if ((now - session.LastMessageTimestamp).TotalSeconds < 1.0)
-                {
-                    session.MessageCountCurrentSecond++;
-                }
-                else
-                {
-                    session.MessageCountCurrentSecond = 1;
-                    session.LastMessageTimestamp = now;
-                }
-
-                session.TotalMessagesSent++;
-
-                if (session.MessageCountCurrentSecond > 2 || session.TotalMessagesSent > 5)
-                {
-                    args.Handled = true;
-                    var attacker = TShock.Players[args.Msg.whoAmI];
-                    if (attacker != null && attacker.Active)
-                    {
-                        attacker.Disconnect("MathCaptcha: Превышен лимит сообщений (Флуд).");
                     }
                     return;
                 }
@@ -297,7 +295,7 @@ public class MathCaptchaPlugin : TerrariaPlugin
         player.SendSuccessMessage("=== ВНИМАНИЕ: КАПЧА ===");
         player.SendWarningMessage($"Решите пример: {a} + {b}");
         player.SendWarningMessage("Вы полностью обездвижены сервером. Введите ответ в чат!");
-        player.SendErrorMessage($"Осталось времени: {timeLeft} сек. Иначе — автоматический БАН.");
+        player.SendErrorMessage($"Осталось времени: {timeLeft} сек. У вас есть всего 5 попыток!");
         player.SendInfoMessage(" ");
     }
 }
