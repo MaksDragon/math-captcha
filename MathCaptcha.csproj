@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>MathCaptcha</AssemblyName>
+    <RootNamespace>MathCaptcha</RootNamespace>
+    <NoWarn>$(NoWarn);CS8632;CS8602</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="TerrariaServer">
+      <HintPath>/home/yomissayy/777/TerrariaServer.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
+    <Reference Include="TShockAPI">
+      <HintPath>/home/yomissayy/777/TShockAPI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
+    <Reference Include="OTAPI">
+      <HintPath>/home/yomissayy/777/OTAPI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>
